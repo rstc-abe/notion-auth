@@ -80,6 +80,7 @@
             font-weight: 600;
             cursor: pointer;
             transition: transform 0.2s ease;
+            margin-bottom: 0.5rem;
         }
 
         .btn:hover {
@@ -90,72 +91,73 @@
             transform: translateY(0);
         }
 
+        .btn-secondary {
+            background: #6c757d;
+        }
+
         .error {
             color: #e74c3c;
             margin-top: 1rem;
             font-size: 0.9rem;
         }
 
-        .notion-container {
-            display: none;
-            width: 100vw;
-            height: 100vh;
-            position: fixed;
-            top: 0;
-            left: 0;
-            background: white;
-        }
-
-        .notion-frame {
-            width: 100%;
-            height: 100%;
-            border: none;
-        }
-
-        .header {
-            background: #f8f9fa;
-            padding: 1rem;
-            border-bottom: 1px solid #e1e5e9;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .logout-btn {
-            background: #dc3545;
-            color: white;
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            cursor: pointer;
+        .success {
+            color: #27ae60;
+            margin-top: 1rem;
             font-size: 0.9rem;
         }
 
-        .logout-btn:hover {
-            background: #c82333;
+        .authenticated-state {
+            display: none;
+        }
+
+        .access-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .info {
+            background: #e8f4f8;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+            color: #2c5282;
         }
     </style>
 </head>
 <body>
-    <div class="container" id="loginContainer">
-        <div class="logo">🔒</div>
-        <h1>アクセス認証が必要です</h1>
-        <form id="passwordForm">
-            <div class="form-group">
-                <label for="password">パスワード:</label>
-                <input type="password" id="password" name="password" required>
-            </div>
-            <button type="submit" class="btn">アクセス</button>
-        </form>
-        <div id="error" class="error" style="display: none;"></div>
-    </div>
-
-    <div class="notion-container" id="notionContainer">
-        <div class="header">
-            <h2>Notion ページ</h2>
-            <button class="logout-btn" onclick="logout()">ログアウト</button>
+    <div class="container">
+        <!-- 未認証状態 -->
+        <div id="loginState">
+            <div class="logo">🔒</div>
+            <h1>アクセス認証が必要です</h1>
+            <form id="passwordForm">
+                <div class="form-group">
+                    <label for="password">パスワード:</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+                <button type="submit" class="btn">アクセス</button>
+            </form>
+            <div id="error" class="error" style="display: none;"></div>
         </div>
-        <iframe id="notionFrame" class="notion-frame" src=""></iframe>
+
+        <!-- 認証済み状態 -->
+        <div id="authenticatedState" class="authenticated-state">
+            <div class="logo">✅</div>
+            <h1>認証完了</h1>
+            <div class="info">
+                認証が完了しました。Notionページにアクセスできます。
+            </div>
+            <div class="access-buttons">
+                <button class="btn" onclick="openNotionPage()">Notionページを開く</button>
+                <button class="btn" onclick="openNotionNewTab()">新しいタブで開く</button>
+                <button class="btn btn-secondary" onclick="logout()">ログアウト</button>
+            </div>
+            <div id="sessionInfo" style="margin-top: 1rem; font-size: 0.8rem; color: #666;"></div>
+        </div>
     </div>
 
     <script>
@@ -163,18 +165,37 @@
         const NOTION_URL = 'https://ritsuanstc.notion.site/AI-LLM-207bb904c7da8001af4ce24021729686?source=copy_link';
         
         // ここにパスワードを設定してください（定期的に変更）
-        const CORRECT_PASSWORD = 'aitech06AA';
+        const CORRECT_PASSWORD = 'your-password-2025';
         
         // セッション管理用のキー
         const SESSION_KEY = 'notion_access_granted';
+        const SESSION_TIME_KEY = 'notion_access_time';
+        
+        // セッション有効期限（24時間）
+        const SESSION_DURATION = 24 * 60 * 60 * 1000;
         
         // ページ読み込み時にセッションをチェック
         window.addEventListener('load', function() {
-            const isAuthenticated = sessionStorage.getItem(SESSION_KEY);
-            if (isAuthenticated === 'true') {
-                showNotionPage();
-            }
+            checkAuthentication();
+            document.getElementById('password').focus();
         });
+        
+        // 認証状態をチェック
+        function checkAuthentication() {
+            const isAuthenticated = sessionStorage.getItem(SESSION_KEY);
+            const authTime = sessionStorage.getItem(SESSION_TIME_KEY);
+            const currentTime = new Date().getTime();
+            
+            if (isAuthenticated === 'true' && authTime && (currentTime - parseInt(authTime) < SESSION_DURATION)) {
+                showAuthenticatedState();
+                updateSessionInfo(parseInt(authTime));
+            } else {
+                // セッション期限切れの場合はクリア
+                sessionStorage.removeItem(SESSION_KEY);
+                sessionStorage.removeItem(SESSION_TIME_KEY);
+                showLoginState();
+            }
+        }
         
         // パスワードフォームの処理
         document.getElementById('passwordForm').addEventListener('submit', function(e) {
@@ -185,8 +206,11 @@
             
             if (password === CORRECT_PASSWORD) {
                 // 認証成功
+                const currentTime = new Date().getTime();
                 sessionStorage.setItem(SESSION_KEY, 'true');
-                showNotionPage();
+                sessionStorage.setItem(SESSION_TIME_KEY, currentTime.toString());
+                showAuthenticatedState();
+                updateSessionInfo(currentTime);
                 errorDiv.style.display = 'none';
             } else {
                 // 認証失敗
@@ -197,24 +221,46 @@
             }
         });
         
-        // Notionページを表示
-        function showNotionPage() {
-            document.getElementById('loginContainer').style.display = 'none';
-            document.getElementById('notionContainer').style.display = 'block';
-            document.getElementById('notionFrame').src = NOTION_URL;
+        // ログイン状態を表示
+        function showLoginState() {
+            document.getElementById('loginState').style.display = 'block';
+            document.getElementById('authenticatedState').style.display = 'none';
+        }
+        
+        // 認証済み状態を表示
+        function showAuthenticatedState() {
+            document.getElementById('loginState').style.display = 'none';
+            document.getElementById('authenticatedState').style.display = 'block';
+        }
+        
+        // セッション情報を更新
+        function updateSessionInfo(authTime) {
+            const expiryTime = new Date(authTime + SESSION_DURATION);
+            document.getElementById('sessionInfo').textContent = 
+                `セッション有効期限: ${expiryTime.toLocaleString('ja-JP')}`;
+        }
+        
+        // Notionページを同じタブで開く
+        function openNotionPage() {
+            window.location.href = NOTION_URL;
+        }
+        
+        // Notionページを新しいタブで開く
+        function openNotionNewTab() {
+            window.open(NOTION_URL, '_blank');
         }
         
         // ログアウト処理
         function logout() {
             sessionStorage.removeItem(SESSION_KEY);
-            document.getElementById('loginContainer').style.display = 'block';
-            document.getElementById('notionContainer').style.display = 'none';
-            document.getElementById('notionFrame').src = '';
+            sessionStorage.removeItem(SESSION_TIME_KEY);
             document.getElementById('password').value = '';
+            showLoginState();
+            document.getElementById('password').focus();
         }
         
-        // パスワード入力欄にフォーカス
-        document.getElementById('password').focus();
+        // 定期的にセッション状態をチェック
+        setInterval(checkAuthentication, 60000); // 1分ごと
     </script>
 </body>
 </html>
